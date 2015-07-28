@@ -1,6 +1,7 @@
 {
   "Debug": true,
   "ListenAddress": ":3000",
+  "AgentAPIPort": ":3001",
   "MySQLTopologyUser": "msandbox",
   "MySQLTopologyPassword": "msandbox",
   "MySQLTopologyCredentialsConfigFile": "",

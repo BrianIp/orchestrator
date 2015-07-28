@@ -139,11 +139,11 @@ func agentsHttp() {
 	// Serve
 	if config.Config.AgentsUseSSL {
 		log.Info("Serving via SSL")
-		err := nethttp.ListenAndServeTLS(":3001", config.Config.SSLCertFile, config.Config.SSLPrivateKeyFile, m)
+		err := nethttp.ListenAndServeTLS(config.Config.AgentAPIPort, config.Config.SSLCertFile, config.Config.SSLPrivateKeyFile, m)
 		if err != nil {
 			log.Fatale(err)
 		}
 	} else {
-		nethttp.ListenAndServe(":3001", m)
+		nethttp.ListenAndServe(config.Config.AgentAPIPort, m)
 	}
 }
