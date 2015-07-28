@@ -19,11 +19,12 @@ package main
 import (
 	"flag"
 	"fmt"
+	"runtime"
+
 	"github.com/outbrain/golib/log"
 	"github.com/outbrain/golib/math"
 	"github.com/outbrain/orchestrator/go/app"
 	"github.com/outbrain/orchestrator/go/config"
-	"runtime"
 )
 
 const prompt string = `
@@ -590,7 +591,7 @@ func main() {
 	if len(*configFile) > 0 {
 		config.ForceRead(*configFile)
 	} else {
-		config.Read("/etc/orchestrator.conf.json", "conf/orchestrator.conf.json", "orchestrator.conf.json")
+		config.Read("/Users/brianip/Development/orchestrator-tests/orchestrator.conf.json", "/etc/orchestrator.conf.json", "conf/orchestrator.conf.json", "orchestrator.conf.json")
 	}
 	if config.Config.Debug {
 		log.SetLevel(log.DEBUG)
