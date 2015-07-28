@@ -17,11 +17,12 @@
 package logic
 
 import (
+	"time"
+
 	"github.com/outbrain/golib/log"
 	"github.com/outbrain/orchestrator/go/agent"
 	"github.com/outbrain/orchestrator/go/config"
 	"github.com/outbrain/orchestrator/go/inst"
-	"time"
 )
 
 const (
@@ -211,7 +212,7 @@ func ContinuousAgentsPoll() {
 	go discoverSeededAgents()
 
 	tick := time.Tick(time.Duration(config.Config.DiscoveryPollSeconds) * time.Second)
-	forgetUnseenTick := time.Tick(time.Hour)
+	forgetUnseenTick := time.Tick(time.Second * 60)
 	for _ = range tick {
 		agentsHosts, _ := agent.ReadOutdatedAgentsHosts()
 		log.Debugf("outdated agents hosts: %+v", agentsHosts)
