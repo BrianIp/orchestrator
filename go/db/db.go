@@ -19,6 +19,7 @@ package db
 import (
 	"database/sql"
 	"fmt"
+
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/outbrain/golib/log"
 	"github.com/outbrain/golib/sqlutils"
@@ -468,6 +469,7 @@ var generateSQLPatches = []string{
 // OpenTopology returns a DB instance to access a topology instance
 func OpenTopology(host string, port int) (*sql.DB, error) {
 	mysql_uri := fmt.Sprintf("%s:%s@tcp(%s:%d)/?timeout=%ds", config.Config.MySQLTopologyUser, config.Config.MySQLTopologyPassword, host, port, config.Config.MySQLConnectTimeoutSeconds)
+	log.Debug("mysql uri: " + mysql_uri)
 	db, _, err := sqlutils.GetDB(mysql_uri)
 	db.SetMaxOpenConns(config.Config.MySQLTopologyMaxPoolConnections)
 	db.SetMaxIdleConns(config.Config.MySQLTopologyMaxPoolConnections)
@@ -478,6 +480,7 @@ func OpenTopology(host string, port int) (*sql.DB, error) {
 func OpenOrchestrator() (*sql.DB, error) {
 	mysql_uri := fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?timeout=%ds", config.Config.MySQLOrchestratorUser, config.Config.MySQLOrchestratorPassword,
 		config.Config.MySQLOrchestratorHost, config.Config.MySQLOrchestratorPort, config.Config.MySQLOrchestratorDatabase, config.Config.MySQLConnectTimeoutSeconds)
+	log.Debug("mysql uri: " + mysql_uri)
 	db, fromCache, err := sqlutils.GetDB(mysql_uri)
 	if err == nil && !fromCache {
 		if !config.Config.SkipOrchestratorDatabaseUpdate {

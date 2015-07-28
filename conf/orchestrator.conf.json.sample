@@ -44,7 +44,7 @@
   "DataCenterPattern": "[.]([^.]+)[.][^.]+[.]mydomain[.]com",
   "PhysicalEnvironmentPattern": "[.]([^.]+[.][^.]+)[.]mydomain[.]com",
   "RemoveTextFromHostnameDisplay": ".mydomain.com:3306",
-  "ServeAgentsHttp": false,
+  "ServeAgentsHttp": true,
   "AgentsUseSSL": false,
   "SSLSkipVerify": false,
   "SSLPrivateKeyFile": "",

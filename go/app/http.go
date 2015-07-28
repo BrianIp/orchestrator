@@ -18,6 +18,12 @@
 package app
 
 import (
+	nethttp "net/http"
+	"os"
+	"os/signal"
+	"strings"
+	"syscall"
+
 	"github.com/go-martini/martini"
 	"github.com/martini-contrib/auth"
 	"github.com/martini-contrib/gzip"
@@ -27,11 +33,6 @@ import (
 	"github.com/outbrain/orchestrator/go/http"
 	"github.com/outbrain/orchestrator/go/inst"
 	"github.com/outbrain/orchestrator/go/logic"
-	nethttp "net/http"
-	"os"
-	"os/signal"
-	"strings"
-	"syscall"
 )
 
 // acceptSignals registers for OS signals
@@ -55,9 +56,9 @@ func Http(discovery bool) {
 	acceptSignals()
 
 	martini.Env = martini.Prod
-	if config.Config.ServeAgentsHttp {
-		go agentsHttp()
-	}
+	//	if config.Config.ServeAgentsHttp {
+	go agentsHttp()
+	//	}
 	standardHttp(discovery)
 }
 

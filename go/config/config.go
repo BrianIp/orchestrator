@@ -17,9 +17,10 @@
 package config
 
 import (
-	"code.google.com/p/gcfg"
 	"encoding/json"
 	"os"
+
+	"code.google.com/p/gcfg"
 
 	"github.com/outbrain/golib/log"
 )
@@ -154,7 +155,7 @@ func NewConfiguration() *Configuration {
 		DataCenterPattern:                          "",
 		PhysicalEnvironmentPattern:                 "",
 		PromotionIgnoreHostnameFilters:             []string{},
-		ServeAgentsHttp:                            false,
+		ServeAgentsHttp:                            true,
 		AgentsUseSSL:                               false,
 		SSLSkipVerify:                              false,
 		SSLPrivateKeyFile:                          "",
