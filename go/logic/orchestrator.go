@@ -212,7 +212,7 @@ func ContinuousAgentsPoll() {
 	go discoverSeededAgents()
 
 	tick := time.Tick(time.Duration(config.Config.DiscoveryPollSeconds) * time.Second)
-	forgetUnseenTick := time.Tick(time.Second * 60)
+	forgetUnseenTick := time.Tick(time.Second * 30)
 	for _ = range tick {
 		agentsHosts, _ := agent.ReadOutdatedAgentsHosts()
 		log.Debugf("outdated agents hosts: %+v", agentsHosts)
