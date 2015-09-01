@@ -1,0 +1,1 @@
+{"rsync":{"/orchestrator":{"type":"rsync","guestpath":"/orchestrator","hostpath":"/Users/brianip/Development/go/src/github.com/outbrain/orchestrator","disabled":false,"owner":"vagrant","group":"vagrant"}}}

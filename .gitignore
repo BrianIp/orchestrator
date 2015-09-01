@@ -1,5 +1,4 @@
 conf/orchestrator.conf.json
-.vagrant/
 vagrant/admin-post-install.sh
 vagrant/db-post-install.sh
 vagrant/db1-post-install.sh
