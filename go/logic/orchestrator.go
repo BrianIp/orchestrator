@@ -17,15 +17,16 @@
 package logic
 
 import (
+	"net"
+	"strings"
+	"time"
+
 	"github.com/cyberdelia/go-metrics-graphite"
 	"github.com/outbrain/golib/log"
 	"github.com/outbrain/orchestrator/go/agent"
 	"github.com/outbrain/orchestrator/go/config"
 	"github.com/outbrain/orchestrator/go/inst"
 	"github.com/rcrowley/go-metrics"
-	"net"
-	"strings"
-	"time"
 )
 
 const (
@@ -237,6 +238,7 @@ func pollAgent(hostname string) error {
 	}
 
 	err = agent.UpdateAgentInfo(hostname, polledAgent)
+	agent.GetAgentMetrics(polledAgent)
 	if err != nil {
 		return log.Errore(err)
 	}

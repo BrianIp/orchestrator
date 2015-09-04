@@ -936,3 +936,29 @@ Cleanup:
 	}
 	return res, err
 }
+
+func GetAgentMetrics(agent Agent) {
+	inspectPort := ":6969"
+	testJustForThisOne := "192.168.57.201"
+	req, err := http.NewRequest("GET", testJustForThisOne+inspectPort+"/api/v1/metrics.json/", nil)
+	if err != nil {
+		panic(err)
+	}
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		panic(err)
+	}
+	defer resp.Body.Close()
+
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		panic(err)
+	}
+
+	err = json.Unmarshal(body, agent.Metrics)
+	if err != nil {
+		panic(err)
+	}
+
+}

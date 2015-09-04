@@ -37,6 +37,16 @@ type Mount struct {
 	MySQLDiskUsage int64
 }
 
+// AgentMetrics holds various metrics about
+type AgentMetrics struct {
+	SecondsBehindMaster int
+	SlaveSeqFile        int
+	SlavePosition       int
+	Uptime              int
+	Queries             int
+	ThreadsRunning      int
+}
+
 // Agent presents the data of an agent
 type Agent struct {
 	Hostname                string
@@ -52,6 +62,7 @@ type Agent struct {
 	MySQLPort               int64
 	MySQLDatadirDiskFree    int64
 	MySQLErrorLogTail       []string
+	Metrics                 AgentMetrics
 }
 
 // SeedOperation makes for the high level data & state of a seed operation
