@@ -28,7 +28,7 @@ import (
 	"github.com/outbrain/orchestrator/go/inst"
 	"github.com/outbrain/orchestrator/go/os"
 	"github.com/outbrain/orchestrator/go/process"
-	"github.com/pmylund/go-cache"
+	"github.com/patrickmn/go-cache"
 	"github.com/rcrowley/go-metrics"
 )
 
@@ -125,6 +125,9 @@ var recoverDeadIntermediateMasterFailureCounter = metrics.NewCounter()
 var recoverDeadCoMasterCounter = metrics.NewCounter()
 var recoverDeadCoMasterSuccessCounter = metrics.NewCounter()
 var recoverDeadCoMasterFailureCounter = metrics.NewCounter()
+var recoverUnreachableMasterWithStaleSlavesCounter = metrics.NewCounter()
+var recoverUnreachableMasterWithStaleSlavesSuccessCounter = metrics.NewCounter()
+var recoverUnreachableMasterWithStaleSlavesFailureCounter = metrics.NewCounter()
 
 func init() {
 	metrics.Register("recover.dead_master.start", recoverDeadMasterCounter)
@@ -136,6 +139,9 @@ func init() {
 	metrics.Register("recover.dead_co_master.start", recoverDeadCoMasterCounter)
 	metrics.Register("recover.dead_co_master.success", recoverDeadCoMasterSuccessCounter)
 	metrics.Register("recover.dead_co_master.fail", recoverDeadCoMasterFailureCounter)
+	metrics.Register("recover.unreach_master_stale_slaves.start", recoverUnreachableMasterWithStaleSlavesCounter)
+	metrics.Register("recover.unreach_master_stale_slaves.success", recoverUnreachableMasterWithStaleSlavesSuccessCounter)
+	metrics.Register("recover.unreach_master_stale_slaves.fail", recoverUnreachableMasterWithStaleSlavesFailureCounter)
 }
 
 // replaceCommandPlaceholders replaces agreed-upon placeholders with analysis data
@@ -903,6 +909,26 @@ func checkAndRecoverDeadCoMaster(analysisEntry inst.ReplicationAnalysis, candida
 	return true, topologyRecovery, err
 }
 
+// checkAndRecoverUnreachableMasterWithStaleSlaves executes an external process. No other action is taken.
+// Returns false.
+func checkAndRecoverUnreachableMasterWithStaleSlaves(analysisEntry inst.ReplicationAnalysis, candidateInstanceKey *inst.InstanceKey, forceInstanceRecovery bool, skipProcesses bool) (bool, *TopologyRecovery, error) {
+	topologyRecovery, err := AttemptRecoveryRegistration(&analysisEntry, !forceInstanceRecovery, !forceInstanceRecovery)
+	if topologyRecovery == nil {
+		log.Debugf("topology_recovery: found an active or recent recovery on %+v. Will not issue another UnreachableMasterWithStaleSlaves.", analysisEntry.AnalyzedInstanceKey)
+	} else {
+		recoverUnreachableMasterWithStaleSlavesCounter.Inc(1)
+		if !skipProcesses {
+			err := executeProcesses(config.Config.UnreachableMasterWithStaleSlavesProcesses, "UnreachableMasterWithStaleSlavesProcesses", topologyRecovery, false)
+			if err != nil {
+				recoverUnreachableMasterWithStaleSlavesFailureCounter.Inc(1)
+			} else {
+				recoverUnreachableMasterWithStaleSlavesSuccessCounter.Inc(1)
+			}
+		}
+	}
+	return false, nil, err
+}
+
 // checkAndRecoverGenericProblem is a general-purpose recovery function
 func checkAndRecoverGenericProblem(analysisEntry inst.ReplicationAnalysis, candidateInstanceKey *inst.InstanceKey, forceInstanceRecovery bool, skipProcesses bool) (bool, *TopologyRecovery, error) {
 	return false, nil, nil
@@ -979,7 +1005,7 @@ func executeCheckAndRecoverFunction(analysisEntry inst.ReplicationAnalysis, cand
 	case inst.FirstTierSlaveFailingToConnectToMaster:
 		go emergentlyReadTopologyInstance(&analysisEntry.AnalyzedInstanceMasterKey, analysisEntry.Analysis)
 	case inst.UnreachableMasterWithStaleSlaves:
-		checkAndRecoverFunction = checkAndRecoverGenericProblem
+		checkAndRecoverFunction = checkAndRecoverUnreachableMasterWithStaleSlaves
 	}
 	// Right now this is mostly causing noise with no clear action.
 	// Will revisit this in the future.
@@ -1020,9 +1046,15 @@ func executeCheckAndRecoverFunction(analysisEntry inst.ReplicationAnalysis, cand
 
 // CheckAndRecover is the main entry point for the recovery mechanism
 func CheckAndRecover(specificInstance *inst.InstanceKey, candidateInstanceKey *inst.InstanceKey, skipProcesses bool) (recoveryAttempted bool, promotedSlaveKey *inst.InstanceKey, err error) {
+	// Allow the analysis to run evern if we don't want to recover
 	replicationAnalysis, err := inst.GetReplicationAnalysis("", true, true)
 	if err != nil {
 		return false, nil, log.Errore(err)
+	}
+	// Check for recovery being disabled globally
+	recoveryDisabledGlobally, err := IsRecoveryDisabled()
+	if err != nil {
+		log.Warningf("Unable to determine if recovery is disabled globally: %v", err)
 	}
 	if *config.RuntimeCLIFlags.Noop {
 		log.Debugf("--noop provided; will not execute processes")
@@ -1047,6 +1079,10 @@ func CheckAndRecover(specificInstance *inst.InstanceKey, candidateInstanceKey *i
 			if topologyRecovery != nil {
 				promotedSlaveKey = topologyRecovery.SuccessorKey
 			}
+		} else if recoveryDisabledGlobally {
+			log.Infof("CheckAndRecover: InstanceKey: %+v, candidateInstanceKey: %+v, "+
+				"skipProcesses: %v: NOT Recovering host (disabled globally)",
+				analysisEntry.AnalyzedInstanceKey, candidateInstanceKey, skipProcesses)
 		} else {
 			go executeCheckAndRecoverFunction(analysisEntry, candidateInstanceKey, false, skipProcesses)
 		}
@@ -1131,7 +1167,7 @@ func GracefulMasterTakeover(clusterName string) (topologyRecovery *TopologyRecov
 		return nil, nil, err
 	}
 	if !designatedInstance.MasterKey.Equals(&clusterMaster.Key) {
-		return nil, nil, fmt.Errorf("Sanity check failure. It seems like the desginated instance %+v does nto replicate from the master %+v. This error is strange. Panicking", designatedInstance.Key, clusterMaster.Key)
+		return nil, nil, fmt.Errorf("Sanity check failure. It seems like the designated instance %+v does not replicate from the master %+v (designated instance's master key is %+v). This error is strange. Panicking", designatedInstance.Key, clusterMaster.Key, designatedInstance.MasterKey)
 	}
 	if !designatedInstance.HasReasonableMaintenanceReplicationLag() {
 		return nil, nil, fmt.Errorf("Desginated instance %+v seems to be lagging to much for thie operation. Aborting.", designatedInstance.Key)

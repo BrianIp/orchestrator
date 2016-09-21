@@ -50,7 +50,7 @@ type Configuration struct {
 	MySQLTopologyMaxPoolConnections              int    // Max concurrent connections on any topology instance
 	DatabaselessMode__experimental               bool   // !!!EXPERIMENTAL!!! Orchestrator will execute without speaking to a backend database; super-standalone mode
 	MySQLOrchestratorHost                        string
-	MySQLOrchestratorMaxPoolConnections          int    // The maximum size of the connection pool to the Orchestrator backend.
+	MySQLOrchestratorMaxPoolConnections          int // The maximum size of the connection pool to the Orchestrator backend.
 	MySQLOrchestratorPort                        uint
 	MySQLOrchestratorDatabase                    string
 	MySQLOrchestratorUser                        string
@@ -62,6 +62,8 @@ type Configuration struct {
 	MySQLOrchestratorSSLSkipVerify               bool     // If true, do not strictly validate mutual TLS certs for the Orchestrator mysql instances
 	MySQLOrchestratorUseMutualTLS                bool     // Turn on TLS authentication with the Orchestrator MySQL instance
 	MySQLConnectTimeoutSeconds                   int      // Number of seconds before connection is aborted (driver-side)
+	MySQLOrchestratorReadTimeoutSeconds          int      // Number of seconds before backend mysql read operation is aborted (driver-side)
+	MySQLTopologyReadTimeoutSeconds              int      // Number of seconds before topology mysql read operation is aborted (driver-side)
 	DefaultInstancePort                          int      // In case port was not specified on command line
 	SlaveLagQuery                                string   // custom query to check on slave lg (e.g. heartbeat table)
 	SlaveStartPostWaitMilliseconds               int      // Time to wait after START SLAVE before re-readong instance (give slave chance to connect to master)
@@ -71,6 +73,8 @@ type Configuration struct {
 	BinlogFileHistoryDays                        int      // When > 0, amount of days for which orchestrator records per-instance binlog files & sizes
 	UnseenInstanceForgetHours                    uint     // Number of hours after which an unseen instance is forgotten
 	SnapshotTopologiesIntervalHours              uint     // Interval in hour between snapshot-topologies invocation. Default: 0 (disabled)
+	DiscoveryMaxConcurrency                      uint     // Number of goroutines doing hosts discovery
+	DiscoveryQueueCapacity                       uint     // Buffer size of the discovery queue. Should be greater than the number of DB instances being discovered
 	InstanceBulkOperationsWaitTimeoutSeconds     uint     // Time to wait on a single instance when doing bulk (many instances) operation
 	ActiveNodeExpireSeconds                      uint     // Maximum time to wait for active node to send keepalive before attempting to take over as active node.
 	NodeHealthExpiry                             bool     // Do we expire the node_health table? Usually this is true but it might be disabled on command line tools if an orchestrator daemon is running.
@@ -93,7 +97,10 @@ type Configuration struct {
 	AuditPurgeDays                               uint   // Days after which audit entries are purged from the database
 	RemoveTextFromHostnameDisplay                string // Text to strip off the hostname on cluster/clusters pages
 	ReadOnly                                     bool
-	AuthenticationMethod                         string            // Type of autherntication to use, if any. "" for none, "basic" for BasicAuth, "multi" for advanced BasicAuth, "proxy" for forwarded credentials via reverse proxy, "token" for token based access
+	AuthenticationMethod                         string // Type of autherntication to use, if any. "" for none, "basic" for BasicAuth, "multi" for advanced BasicAuth, "proxy" for forwarded credentials via reverse proxy, "token" for token based access
+	OAuthClientId                                string
+	OAuthClientSecret                            string
+	OAuthScopes                                  []string
 	HTTPAuthUser                                 string            // Username for HTTP Basic authentication (blank disables authentication)
 	HTTPAuthPassword                             string            // Password for HTTP Basic authentication
 	AuthUserHeader                               string            // HTTP header indicating auth user, when AuthenticationMethod is "proxy"
@@ -159,6 +166,7 @@ type Configuration struct {
 	PostUnsuccessfulFailoverProcesses            []string          // Processes to execute after a not-completely-successful failover (order of execution undefined). May and should use some of these placeholders: {failureType}, {failureDescription}, {failedHost}, {failureCluster}, {failureClusterAlias}, {failureClusterDomain}, {failedPort}, {successorHost}, {successorPort}, {successorAlias}, {countSlaves}, {slaveHosts}, {isDowntimed}, {isSuccessful}, {lostSlaves}
 	PostMasterFailoverProcesses                  []string          // Processes to execute after doing a master failover (order of execution undefined). Uses same placeholders as PostFailoverProcesses
 	PostIntermediateMasterFailoverProcesses      []string          // Processes to execute after doing a master failover (order of execution undefined). Uses same placeholders as PostFailoverProcesses
+	UnreachableMasterWithStaleSlavesProcesses    []string          // Processes to execute when detecting an UnreachableMasterWithStaleSlaves scenario.
 	CoMasterRecoveryMustPromoteOtherCoMaster     bool              // When 'false', anything can get promoted (and candidates are prefered over others). When 'true', orchestrator will promote the other co-master or else fail
 	DetachLostSlavesAfterMasterFailover          bool              // Should slaves that are not to be lost in master recovery (i.e. were more up-to-date than promoted slave) be forcibly detached
 	ApplyMySQLPromotionAfterMasterFailover       bool              // Should orchestrator take upon itself to apply MySQL master promotion: set read_only=0, detach replication, etc.
@@ -200,13 +208,15 @@ func newConfiguration() *Configuration {
 		StatusEndpoint:                               "/api/status",
 		StatusSimpleHealth:                           true,
 		StatusOUVerify:                               false,
-		MySQLOrchestratorMaxPoolConnections:          128,              // limit concurrent conns to backend DB
+		MySQLOrchestratorMaxPoolConnections:          128, // limit concurrent conns to backend DB
 		MySQLOrchestratorPort:                        3306,
 		MySQLTopologyMaxPoolConnections:              3,
 		MySQLTopologyUseMutualTLS:                    false,
 		DatabaselessMode__experimental:               false,
 		MySQLOrchestratorUseMutualTLS:                false,
 		MySQLConnectTimeoutSeconds:                   2,
+		MySQLOrchestratorReadTimeoutSeconds:          30,
+		MySQLTopologyReadTimeoutSeconds:              10,
 		DefaultInstancePort:                          3306,
 		InstancePollSeconds:                          5,
 		ReadLongRunningQueries:                       true,
@@ -215,6 +225,8 @@ func newConfiguration() *Configuration {
 		SnapshotTopologiesIntervalHours:              0,
 		SlaveStartPostWaitMilliseconds:               1000,
 		DiscoverByShowSlaveHosts:                     false,
+		DiscoveryMaxConcurrency:                      300,
+		DiscoveryQueueCapacity:                       100000,
 		InstanceBulkOperationsWaitTimeoutSeconds:     10,
 		ActiveNodeExpireSeconds:                      5,
 		NodeHealthExpiry:                             true,
@@ -300,6 +312,7 @@ func newConfiguration() *Configuration {
 		PostIntermediateMasterFailoverProcesses:      []string{},
 		PostFailoverProcesses:                        []string{},
 		PostUnsuccessfulFailoverProcesses:            []string{},
+		UnreachableMasterWithStaleSlavesProcesses:    []string{},
 		CoMasterRecoveryMustPromoteOtherCoMaster:     true,
 		DetachLostSlavesAfterMasterFailover:          true,
 		ApplyMySQLPromotionAfterMasterFailover:       false,

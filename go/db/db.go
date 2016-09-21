@@ -498,6 +498,12 @@ var generateSQLBase = []string{
 		  PRIMARY KEY (deployed_version)
 		) ENGINE=InnoDB DEFAULT CHARSET=ascii
 	`,
+	`
+		CREATE TABLE IF NOT EXISTS global_recovery_disable (
+		  disable_recovery tinyint unsigned NOT NULL COMMENT 'Insert 1 to disable recovery globally',
+		  PRIMARY KEY (disable_recovery)
+		) ENGINE=InnoDB DEFAULT CHARSET=ascii
+	`,
 }
 
 // generateSQLPatches contains DDLs for patching schema to the latest version.
@@ -841,6 +847,14 @@ var generateSQLPatches = []string{
 			database_instance_maintenance
 			ADD COLUMN explicitly_bounded TINYINT UNSIGNED NOT NULL
 	`,
+	`
+		ALTER TABLE node_health_history
+			ADD COLUMN app_version varchar(30) CHARACTER SET ascii NOT NULL DEFAULT ""
+	`,
+	`
+		ALTER TABLE node_health
+			ADD COLUMN app_version varchar(30) CHARACTER SET ascii NOT NULL DEFAULT ""
+	`,
 }
 
 // Track if a TLS has already been configured for topology
@@ -851,7 +865,13 @@ var orchestratorTLSConfigured bool = false
 
 // OpenTopology returns a DB instance to access a topology instance
 func OpenTopology(host string, port int) (*sql.DB, error) {
-	mysql_uri := fmt.Sprintf("%s:%s@tcp(%s:%d)/?timeout=%ds", config.Config.MySQLTopologyUser, config.Config.MySQLTopologyPassword, host, port, config.Config.MySQLConnectTimeoutSeconds)
+	mysql_uri := fmt.Sprintf("%s:%s@tcp(%s:%d)/?timeout=%ds&readTimeout=%ds",
+		config.Config.MySQLTopologyUser,
+		config.Config.MySQLTopologyPassword,
+		host, port,
+		config.Config.MySQLConnectTimeoutSeconds,
+		config.Config.MySQLTopologyReadTimeoutSeconds,
+	)
 	if config.Config.MySQLTopologyUseMutualTLS {
 		mysql_uri, _ = SetupMySQLTopologyTLS(mysql_uri)
 	}
@@ -890,8 +910,15 @@ func OpenOrchestrator() (*sql.DB, error) {
 	if config.Config.DatabaselessMode__experimental {
 		return nil, nil
 	}
-	mysql_uri := fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?timeout=%ds", config.Config.MySQLOrchestratorUser, config.Config.MySQLOrchestratorPassword,
-		config.Config.MySQLOrchestratorHost, config.Config.MySQLOrchestratorPort, config.Config.MySQLOrchestratorDatabase, config.Config.MySQLConnectTimeoutSeconds)
+	mysql_uri := fmt.Sprintf("%s:%s@tcp(%s:%d)/%s?timeout=%ds&readTimeout=%ds",
+		config.Config.MySQLOrchestratorUser,
+		config.Config.MySQLOrchestratorPassword,
+		config.Config.MySQLOrchestratorHost,
+		config.Config.MySQLOrchestratorPort,
+		config.Config.MySQLOrchestratorDatabase,
+		config.Config.MySQLConnectTimeoutSeconds,
+		config.Config.MySQLOrchestratorReadTimeoutSeconds,
+	)
 	if config.Config.MySQLOrchestratorUseMutualTLS {
 		mysql_uri, _ = SetupMySQLOrchestratorTLS(mysql_uri)
 	}
